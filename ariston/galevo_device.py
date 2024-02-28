@@ -9,6 +9,8 @@ from typing import Any, Optional
 from .ariston_api import AristonAPI
 from .const import (
     ConsumptionProperties,
+    ConsumptionTimeInterval,
+    ConsumptionType,
     Currency,
     CustomDeviceFeatures,
     DeviceFeatures,
@@ -45,7 +47,12 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def consumption_type(self) -> str:
         """String to get consumption type"""
-        return f"Ch{'%2CDhw' if self.custom_features.get(CustomDeviceFeatures.HAS_DHW) else ''}"
+        return f"Ch{'%2CDhw' if self.has_dhw else ''}{'%2CCooling' if self.hpmp_sys else ''}"
+
+    @property
+    def plant_mode_supported(self) -> bool:
+        """Returns is plant mode supported"""
+        return True
 
     def _update_state(self) -> None:
         """Set custom features"""
@@ -64,9 +71,15 @@ class AristonGalevoDevice(AristonDevice):
             storage_temp = self._get_item_by_id(
                 DeviceProperties.DHW_STORAGE_TEMPERATURE, PropertyType.VALUE
             )
-            self.custom_features[DeviceProperties.DHW_STORAGE_TEMPERATURE] = (
-                storage_temp is not None
+            max_storage_temp = self._get_item_by_id(
+                DeviceProperties.DHW_STORAGE_TEMPERATURE, PropertyType.MAX
             )
+            self.custom_features[DeviceProperties.DHW_STORAGE_TEMPERATURE] = (
+                storage_temp is not None and storage_temp != max_storage_temp
+            )
+
+        self.custom_features[DeviceProperties.CH_FLOW_TEMP] = self.ch_flow_temp_value is not None
+        self.custom_features[DeviceProperties.IS_QUIET] = self.is_quiet_value is not None
 
     def update_state(self) -> None:
         """Update the device states from the cloud"""
@@ -113,7 +126,7 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def zones(self) -> list[dict[str, Any]]:
         """Get device zones wrapper"""
-        return self.features.get(DeviceFeatures.ZONES, list())
+        return self.features.get(DeviceFeatures.ZONES, list[dict[str, Any]]())
 
     @property
     def zone_numbers(self) -> list[int]:
@@ -217,34 +230,29 @@ class AristonGalevoDevice(AristonDevice):
 
     def is_zone_mode_options_contains_manual(self, zone: int) -> bool:
         """Is zone mode options contains manual mode"""
-        return (ZoneMode.MANUAL or ZoneMode.MANUAL_NIGHT) in self.get_zone_mode_options(
+        return (ZoneMode.MANUAL.value or ZoneMode.MANUAL_NIGHT.value) in self.get_zone_mode_options(
             zone
         )
 
     def is_zone_mode_options_contains_time_program(self, zone: int) -> bool:
         """Is zone mode options contains time program mode"""
-        return ZoneMode.TIME_PROGRAM in self.get_zone_mode_options(zone)
+        return ZoneMode.TIME_PROGRAM.value in self.get_zone_mode_options(zone)
 
     def is_zone_mode_options_contains_off(self, zone: int) -> bool:
         """Is zone mode options contains off mode"""
-        return ZoneMode.OFF in self.get_zone_mode_options(zone)
+        return ZoneMode.OFF.value in self.get_zone_mode_options(zone)
 
     @property
     def is_plant_mode_options_contains_off(self) -> bool:
         """Is plant mode options contains off mode"""
-        return PlantMode.OFF in self.plant_mode_options
+        return PlantMode.OFF.value in self.plant_mode_options
 
     @property
     def is_plant_mode_options_contains_cooling(self) -> bool:
         """Is plant mode options contains cooling mode"""
         return (
-            PlantMode.COOLING or PlantMode.COOLING_ONLY
+            PlantMode.COOLING.value or PlantMode.COOLING_ONLY.value
         ) in self.plant_mode_options
-
-    @staticmethod
-    def get_zone_number(zone_number: int) -> str:
-        """Get zone number"""
-        return f"{zone_number}"
 
     @property
     def holiday_expires_on(self) -> str:
@@ -273,6 +281,65 @@ class AristonGalevoDevice(AristonDevice):
         )
 
     @property
+    def hybrid_mode(self) -> str:
+        """Get hybrid mode value"""
+        return self.hybrid_mode_opt_texts[self.hybrid_mode_options.index(self.hybrid_mode_value)]
+
+    @property
+    def hybrid_mode_value(self) -> str:
+        """Get hybrid mode value"""
+        return self._get_item_by_id(
+            DeviceProperties.HYBRID_MODE, PropertyType.VALUE
+        )
+
+    @property
+    def hybrid_mode_options(self) -> str:
+        """Get hybrid mode options"""
+        return self._get_item_by_id(
+            DeviceProperties.HYBRID_MODE, PropertyType.OPTIONS
+        )
+
+    @property
+    def hybrid_mode_opt_texts(self) -> str:
+        """Get hybrid mode opt texts"""
+        return self._get_item_by_id(
+            DeviceProperties.HYBRID_MODE, PropertyType.OPT_TEXTS
+        )
+
+    @property
+    def buffer_control_mode(self) -> str:
+        """Get buffer control mode"""
+        return self.buffer_control_mode_opt_texts[self.buffer_control_mode_options.index(self.buffer_control_mode_value)]
+
+    @property
+    def buffer_control_mode_value(self) -> str:
+        """Get buffer control mode value"""
+        return self._get_item_by_id(
+            DeviceProperties.BUFFER_CONTROL_MODE, PropertyType.VALUE
+        )
+
+    @property
+    def buffer_control_mode_options(self) -> str:
+        """Get buffer control mode options"""
+        return self._get_item_by_id(
+            DeviceProperties.BUFFER_CONTROL_MODE, PropertyType.OPTIONS
+        )
+
+    @property
+    def buffer_control_mode_opt_texts(self) -> str:
+        """Get buffer control mode opt texts"""
+        return self._get_item_by_id(
+            DeviceProperties.BUFFER_CONTROL_MODE, PropertyType.OPT_TEXTS
+        )
+
+    @property
+    def is_quiet_value(self) -> Optional[str]:
+        """Get is quiet value"""
+        return self._get_item_by_id(
+            DeviceProperties.IS_QUIET, PropertyType.VALUE
+        )
+
+    @property
     def ch_flow_setpoint_temp_value(self) -> str:
         """Get central heating flow setpoint temperature value"""
         return self._get_item_by_id(
@@ -280,7 +347,7 @@ class AristonGalevoDevice(AristonDevice):
         )
 
     @property
-    def ch_flow_temp_value(self) -> str:
+    def ch_flow_temp_value(self) -> Optional[str]:
         """Get central heating flow temperature value"""
         return self._get_item_by_id(DeviceProperties.CH_FLOW_TEMP, PropertyType.VALUE)
 
@@ -310,10 +377,10 @@ class AristonGalevoDevice(AristonDevice):
     def is_flame_on_value(self) -> bool:
         """Get is flame on value"""
         return self._get_item_by_id(DeviceProperties.IS_FLAME_ON, PropertyType.VALUE)
-        
+
     @property
-    def is_heating_pump_on_value(self) -> bool:                              
-        """Get is heating pump on value"""                                           
+    def is_heating_pump_on_value(self) -> bool:
+        """Get is heating pump on value"""
         return self._get_item_by_id(DeviceProperties.IS_HEATING_PUMP_ON, PropertyType.VALUE)
 
     @property
@@ -417,6 +484,18 @@ class AristonGalevoDevice(AristonDevice):
         return self._get_item_by_id(
             ThermostatProperties.ZONE_COMFORT_TEMP, PropertyType.VALUE, zone
         )
+    
+    def get_target_temp_step(self, zone: int) -> int:
+        """Get zone target temp step"""
+        return self._get_item_by_id(
+            ThermostatProperties.ZONE_DESIRED_TEMP, PropertyType.STEP, zone
+        )
+    
+    def get_target_temp_value(self, zone: int) -> int:
+        """Get zone target temp value"""
+        return self._get_item_by_id(
+            ThermostatProperties.ZONE_DESIRED_TEMP, PropertyType.VALUE, zone
+        )
 
     def get_heating_flow_offset_value(self, zone: int) -> int:
         """Get zone heating flow offset value"""
@@ -497,7 +576,7 @@ class AristonGalevoDevice(AristonDevice):
         return next(
             (
                 item.get(item_value)
-                for item in self.data.get("items", dict())
+                for item in self.data.get("items", list[dict[str, Any]]())
                 if item.get("id") == item_id
                 and item.get(PropertyType.ZONE) == zone_number
             ),
@@ -507,17 +586,17 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def elect_cost(self) -> Optional[float]:
         """Get electric consumption cost"""
-        return self.consumptions_settings.get(ConsumptionProperties.ELEC_COST)
+        return self.consumptions_settings.get(ConsumptionProperties.ELEC_COST, None)
 
     @property
     def gas_cost(self) -> Optional[float]:
         """Get gas consumption cost"""
-        return self.consumptions_settings.get(ConsumptionProperties.GAS_COST)
+        return self.consumptions_settings.get(ConsumptionProperties.GAS_COST, None)
 
     @property
     def gas_type(self) -> Optional[str]:
         """Get gas type"""
-        gas_type = self.consumptions_settings.get(ConsumptionProperties.GAS_TYPE)
+        gas_type = self.consumptions_settings.get(ConsumptionProperties.GAS_TYPE, None)
         if gas_type in list(GasType):
             return GasType(gas_type).name
         return None
@@ -542,11 +621,9 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def currency(self) -> Optional[str]:
         """Get gas type"""
-        currency = self.consumptions_settings.get(ConsumptionProperties.CURRENCY)
+        currency = self.consumptions_settings.get(ConsumptionProperties.CURRENCY, None)
         if currency in list(Currency):
-            return Currency(
-                self.consumptions_settings.get(ConsumptionProperties.CURRENCY)
-            ).name
+            return Currency(currency).name
         return None
 
     @staticmethod
@@ -569,11 +646,9 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def gas_energy_unit(self) -> Optional[str]:
         """Get gas energy unit"""
-        gas_energy_unit = self.consumptions_settings.get(ConsumptionProperties.GAS_ENERGY_UNIT)
+        gas_energy_unit = self.consumptions_settings.get(ConsumptionProperties.GAS_ENERGY_UNIT, None)
         if gas_energy_unit in list(GasEnergyUnit):
-            return GasEnergyUnit(
-                self.consumptions_settings.get(ConsumptionProperties.GAS_ENERGY_UNIT)
-            ).name
+            return GasEnergyUnit(gas_energy_unit).name
         return None
 
     @staticmethod
@@ -608,6 +683,14 @@ class AristonGalevoDevice(AristonDevice):
         if not energy_account_last_month:
             return None
         return energy_account_last_month[0].get("elect", None)
+
+    @property
+    def electricity_consumption_for_cooling_last_month(self) -> Optional[int]:
+        """Get electricity consumption for cooling last month"""
+        energy_account_last_month = self.energy_account.get("LastMonth", None)
+        if not energy_account_last_month:
+            return None
+        return energy_account_last_month[0].get("cool", None)
 
     @property
     def gas_consumption_for_water_last_month(self) -> Optional[int]:
@@ -699,6 +782,54 @@ class AristonGalevoDevice(AristonDevice):
             DeviceProperties.AUTOMATIC_THERMOREGULATION, 1.0 if auto_thermo else 0.0
         )
 
+    def set_hybrid_mode(self, hybrid_mode: str):
+        """Set hybrid mode"""
+        self.set_item_by_id(
+            DeviceProperties.HYBRID_MODE,
+            self._get_item_by_id(
+                DeviceProperties.HYBRID_MODE, PropertyType.OPT_TEXTS
+            ).index(hybrid_mode),
+        )
+
+    async def async_set_hybrid_mode(self, hybrid_mode: str):
+        """Async set hybrid mode"""
+        await self.async_set_item_by_id(
+            DeviceProperties.HYBRID_MODE,
+            self._get_item_by_id(
+                DeviceProperties.HYBRID_MODE, PropertyType.OPT_TEXTS
+            ).index(hybrid_mode),
+        )
+
+    def set_buffer_control_mode(self, buffer_control_mode: str):
+        """Set buffer control mode"""
+        self.set_item_by_id(
+            DeviceProperties.BUFFER_CONTROL_MODE,
+            self._get_item_by_id(
+                DeviceProperties.BUFFER_CONTROL_MODE, PropertyType.OPT_TEXTS
+            ).index(buffer_control_mode),
+        )
+
+    async def async_set_buffer_control_mode(self, buffer_control_mode: str):
+        """Async set buffer control mode"""
+        await self.async_set_item_by_id(
+            DeviceProperties.BUFFER_CONTROL_MODE,
+            self._get_item_by_id(
+                DeviceProperties.BUFFER_CONTROL_MODE, PropertyType.OPT_TEXTS
+            ).index(buffer_control_mode),
+        )
+
+    def set_is_quiet(self, is_quiet: bool):
+        """Set is quiet"""
+        self.set_item_by_id(
+            DeviceProperties.IS_QUIET, 1.0 if is_quiet else 0.0
+        )
+
+    async def async_set_is_quiet(self, is_quiet: bool):
+        """Async set is quiet"""
+        await self.async_set_item_by_id(
+            DeviceProperties.IS_QUIET, 1.0 if is_quiet else 0.0
+        )
+
     def set_plant_mode(self, plant_mode: PlantMode):
         """Set plant mode"""
         self.set_item_by_id(DeviceProperties.PLANT_MODE, plant_mode.value)
@@ -751,7 +882,7 @@ class AristonGalevoDevice(AristonDevice):
         value: float,
         zone_number: int = 0,
     ):
-        for item in self.data.get("items", dict()):
+        for item in self.data.get("items", list[dict[str, Any]]()):
             if item.get("id") == item_id and item.get(PropertyType.ZONE) == zone_number:
                 item[PropertyType.VALUE] = value
                 break
@@ -795,13 +926,13 @@ class AristonGalevoDevice(AristonDevice):
         self._set_item_by_id(item_id, value, zone_number)
 
     @staticmethod
-    def _create_holiday_end_date(holiday_end: date):
+    def _create_holiday_end_date(holiday_end: Optional[date]):
         return (
             None if holiday_end is None else holiday_end.strftime("%Y-%m-%dT00:00:00")
         )
 
     def _set_holiday(self, holiday_end_date: Optional[str]):
-        for item in self.data.get("items", dict()):
+        for item in self.data.get("items", list[dict[str, Any]]()):
             if item.get("id") == DeviceProperties.HOLIDAY:
                 item[PropertyType.VALUE] = False if holiday_end_date is None else True
                 item[PropertyType.EXPIRES_ON] = (
@@ -821,6 +952,21 @@ class AristonGalevoDevice(AristonDevice):
         await self.api.async_set_holiday(self.gw, holiday_end_date)
         self._set_holiday(holiday_end_date)
 
+    def _calc_energy_account(self) -> dict[str, Any]:
+        """Calculate the energy account"""
+        calculated_heating_energy = 0
+        calculated_cooling_energy = 0
+
+        for sequence in self.consumptions_sequences:
+            if sequence['p'] == ConsumptionTimeInterval.LAST_MONTH.value:
+                if sequence['k'] == ConsumptionType.CENTRAL_COOLING_TOTAL_ENERGY.value:
+                    calculated_cooling_energy = sum(sequence['v'])
+
+                elif sequence['k'] == ConsumptionType.CENTRAL_HEATING_TOTAL_ENERGY.value:
+                    calculated_heating_energy = sum(sequence['v'])
+
+        return {'LastMonth': [{'elect': calculated_heating_energy,'cool': calculated_cooling_energy}] }
+
     def update_energy(self) -> None:
         """Update the device energy settings from the cloud"""
         super().update_energy()
@@ -829,6 +975,9 @@ class AristonGalevoDevice(AristonDevice):
         self.consumptions_settings = self.api.get_consumptions_settings(self.gw)
         # Last month consumption in kwh
         self.energy_account = self.api.get_energy_account(self.gw)
+
+        if not self.energy_account.get('LastMonth'):
+            self.energy_account = self._calc_energy_account()
 
     async def async_update_energy(self) -> None:
         """Async update the device energy settings from the cloud"""
@@ -839,3 +988,6 @@ class AristonGalevoDevice(AristonDevice):
             # Last month consumption in kwh
             self.api.async_get_energy_account(self.gw),
         )
+
+        if not self.energy_account.get('LastMonth'):
+            self.energy_account = self._calc_energy_account()

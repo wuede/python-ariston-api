@@ -5,34 +5,34 @@ from typing import Any, Optional
 
 from .ariston_api import AristonAPI, ConnectionException
 from .const import (
+    ARISTON_API_URL,
     DeviceAttribute,
     SystemType,
     VelisDeviceAttribute,
     WheType,
-    PlantMode,
-    ZoneMode,
-    ConsumptionProperties,
-    ConsumptionType,
-    CustomDeviceFeatures,
-    MedDeviceSettings,
-    VelisDeviceProperties,
-    EvoDeviceProperties,
-    NuosSplitProperties,
-    DeviceProperties,
-    DeviceFeatures,
-    ThermostatProperties,
 )
+from .bsb_device import AristonBsbDevice
 from .lux_device import AristonLuxDevice
+from .lux2_device import AristonLux2Device
+from .evo_one_device import AristonEvoOneDevice
 from .evo_device import AristonEvoDevice
 from .galevo_device import AristonGalevoDevice
 from .lydos_hybrid_device import AristonLydosHybridDevice
-from .velis_device import AristonVelisDevice
 from .nuos_split_device import AristonNuosSplitDevice
-from .evo_lydos_device import AristonEvoLydosDevice
 from .device import AristonDevice
 
 _LOGGER = logging.getLogger(__name__)
 
+_MAP_WHE_TYPES_TO_CLASS = {
+    WheType.Evo.value: AristonEvoOneDevice,
+    WheType.LydosHybrid.value: AristonLydosHybridDevice,
+    WheType.Lydos.value: AristonEvoDevice,
+    WheType.NuosSplit.value: AristonNuosSplitDevice,
+    WheType.Andris2.value: AristonEvoDevice,
+    WheType.Evo2.value: AristonEvoDevice,
+    WheType.Lux2.value: AristonLux2Device,
+    WheType.Lux.value: AristonLuxDevice,
+}
 
 class Ariston:
     """Ariston class"""
@@ -41,9 +41,11 @@ class Ariston:
         self.api = None
         self.cloud_devices: list[dict[str, Any]] = []
 
-    async def async_connect(self, username: str, password: str) -> bool:
+    async def async_connect(
+        self, username: str, password: str, api_url: str = ARISTON_API_URL
+    ) -> bool:
         """Connect to the ariston cloud"""
-        self.api = AristonAPI(username, password)
+        self.api = AristonAPI(username, password, api_url)
         return await self.api.async_connect()
 
     async def async_discover(self) -> Optional[list[dict[str, Any]]]:
@@ -84,44 +86,32 @@ def _get_device(
         None,
     )
     if device is None:
-        _LOGGER.exception(f'No device "{gateway}" found.')
+        _LOGGER.exception("No device %s found.", gateway)
         return None
 
     system_type = device.get(DeviceAttribute.SYS)
-    if system_type == SystemType.GALEVO.value:
-        return AristonGalevoDevice(
-            api,
-            device,
-            is_metric,
-            language_tag,
-        )
-    if system_type == SystemType.VELIS.value:
-        whe_type = device.get(VelisDeviceAttribute.WHE_TYPE)
-        if whe_type == WheType.LydosHybrid.value:
-            return AristonLydosHybridDevice(
-                api,
-                device,
-            )
-        if whe_type in [WheType.Evo.value, WheType.Evo2.value]:
-            return AristonEvoDevice(
-                api,
-                device,
-            )
-        if whe_type == WheType.NuosSplit.value:
-            return AristonNuosSplitDevice(
-                api,
-                device,
-            )
-        if whe_type == WheType.Lux.value:
-            return AristonLuxDevice(
-                api,
-                device,
-            )
-        _LOGGER.exception(f"Unsupported whe type {whe_type}")
-        return None
 
-    _LOGGER.exception(f"Unsupported system type {system_type}")
-    return None
+    match system_type:
+        case SystemType.GALEVO.value:
+            return AristonGalevoDevice(
+                api,
+                device,
+                is_metric,
+                language_tag,
+            )
+        case SystemType.VELIS.value:
+            whe_type = device.get(VelisDeviceAttribute.WHE_TYPE, None)
+            device_class = _MAP_WHE_TYPES_TO_CLASS.get(whe_type, None)
+            if device_class is None:
+                _LOGGER.exception("Unsupported whe type %s", whe_type)
+                return None
+            return device_class(api, device)
+
+        case SystemType.BSB.value:
+            return AristonBsbDevice(api, device)
+        case _:
+            _LOGGER.exception("Unsupported system type %s", system_type)
+            return None
 
 
 def _connect(username: str, password: str) -> AristonAPI:

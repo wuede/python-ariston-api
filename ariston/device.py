@@ -10,6 +10,7 @@ from .ariston_api import AristonAPI
 from .const import (
     ConsumptionTimeInterval,
     ConsumptionType,
+    CustomDeviceFeatures,
     DeviceFeatures,
     DeviceAttribute,
     GalevoDeviceAttribute,
@@ -40,6 +41,7 @@ class AristonDevice(ABC):
             dt.datetime.utcfromtimestamp(0).replace(tzinfo=dt.timezone.utc)
         )
         self.gw: str = self.attributes.get(DeviceAttribute.GW, "")
+        self.bus_errors_list: list[dict[str, Any]] = []
 
     @property
     @abstractmethod
@@ -73,6 +75,11 @@ class AristonDevice(ABC):
         )
 
     @property
+    def whe_model_type(self) -> int:
+        """Get device whe model type wrapper"""
+        return self.attributes.get(VelisDeviceAttribute.WHE_MODEL_TYPE, 0)
+
+    @property
     def gateway(self) -> str:
         """Get device gateway wrapper"""
         return self.gw
@@ -88,6 +95,11 @@ class AristonDevice(ABC):
         return self.attributes.get(DeviceAttribute.NAME, None)
 
     @property
+    def has_dhw(self)-> Optional[bool]:
+        """Get device has domestic hot water"""
+        return self.custom_features.get(CustomDeviceFeatures.HAS_DHW, None)
+
+    @property
     def dhw_mode_changeable(self) -> Optional[bool]:
         """Get device domestic hot water mode changeable wrapper"""
         return self.features.get(DeviceFeatures.DHW_MODE_CHANGEABLE, None)
@@ -101,6 +113,16 @@ class AristonDevice(ABC):
     def firmware_version(self) -> Optional[str]:
         """Get device firmware version wrapper"""
         return self.attributes.get(GalevoDeviceAttribute.FW_VER, None)
+
+    @property
+    def bus_errors(self) -> list[dict[str, Any]]:
+        """Get bus errors list wrapper"""
+        return self.bus_errors_list
+
+    @property
+    def hpmp_sys(self) -> Optional[bool]:
+        """Get device heat pump multi power system"""
+        return self.attributes.get(DeviceAttribute.HPMP_SYS, None)
 
     def get_features(self) -> None:
         """Get device features wrapper"""
@@ -287,7 +309,7 @@ class AristonDevice(ABC):
 
         return None
 
-    def _update_energy(self, old_consumptions_sequences: list[dict[str, Any]]) -> None:
+    def _update_energy(self, old_consumptions_sequences: Optional[list[dict[str, Any]]]) -> None:
         """Update the device energy settings"""
         if (
             self.custom_features.get(
@@ -318,24 +340,31 @@ class AristonDevice(ABC):
         await self._async_get_consumptions_sequences()
         self._update_energy(old_consumptions_sequences)
 
+    def get_bus_errors(self) -> None:
+        """Get bus errors from the cloud"""
+        self.bus_errors_list = self.api.get_bus_errors(self.gw)
+
+    async def async_get_bus_errors(self) -> None:
+        """Async get bus errors from the cloud"""
+        self.bus_errors_list = await self.api.async_get_bus_errors(self.gw)
+
     def _set_energy_features(self):
         """Set energy features"""
         for consumption_type in ConsumptionType:
-            if consumption_type.name is not None:
-                if (
-                    self._get_consumption_sequence_last_value(
-                        consumption_type,
-                        ConsumptionTimeInterval.LAST_DAY,
-                    )
-                    != None
-                ):
-                    self.custom_features[consumption_type.name] = True
-                else:
-                    self.custom_features[consumption_type.name] = False
+            if (
+                self._get_consumption_sequence_last_value(
+                    consumption_type,
+                    ConsumptionTimeInterval.LAST_DAY,
+                )
+                is not None
+            ):
+                self.custom_features[consumption_type.name] = True
+            else:
+                self.custom_features[consumption_type.name] = False
 
     def are_device_features_available(
         self,
-        device_features: Optional[list[DeviceFeatures]],
+        device_features: Optional[list[DeviceFeatures | CustomDeviceFeatures | DeviceAttribute]],
         system_types: Optional[list[SystemType]],
         whe_types: Optional[list[WheType]],
     ) -> bool:
@@ -351,6 +380,7 @@ class AristonDevice(ABC):
                 if (
                     self.features.get(str(device_feature)) is not True
                     and self.custom_features.get(str(device_feature)) is not True
+                    and self.attributes.get(str(device_feature)) is not True
                 ):
                     return False
 

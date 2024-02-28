@@ -2,32 +2,36 @@
 from __future__ import annotations
 
 import logging
-import requests
-import aiohttp
-
+import time
 from typing import Any, Optional
+
+import asyncio
+import aiohttp
+import requests
 
 from .const import (
     ARISTON_API_URL,
+    ARISTON_BSB_ZONES,
+    ARISTON_BUS_ERRORS,
     ARISTON_DATA_ITEMS,
     ARISTON_LITE,
     ARISTON_LOGIN,
-    ARISTON_PLANT_DATA,
     ARISTON_PLANTS,
     ARISTON_REMOTE,
     ARISTON_REPORTS,
     ARISTON_TIME_PROGS,
     ARISTON_VELIS,
+    BsbOperativeMode,
+    BsbZoneMode,
     DeviceFeatures,
     DeviceProperties,
     LydosPlantMode,
-    WaterHeaterMode,
     NuosSplitOperativeMode,
     PlantData,
     ThermostatProperties,
+    WaterHeaterMode,
     ZoneAttribute,
 )
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,10 +43,11 @@ class ConnectionException(Exception):
 class AristonAPI:
     """Ariston API class"""
 
-    def __init__(self, username: str, password: str) -> None:
+    def __init__(self, username: str, password: str, api_url: str = ARISTON_API_URL) -> None:
         """Constructor for Ariston API."""
         self.__username = username
         self.__password = password
+        self.__api_url = api_url
         self.__token = ""
 
     def connect(self) -> bool:
@@ -50,7 +55,7 @@ class AristonAPI:
 
         try:
             response = self._post(
-                f"{ARISTON_API_URL}{ARISTON_LOGIN}",
+                f"{self.__api_url}{ARISTON_LOGIN}",
                 {"usr": self.__username, "pwd": self.__password},
             )
 
@@ -66,14 +71,14 @@ class AristonAPI:
 
     def get_detailed_devices(self) -> list[Any]:
         """Get detailed cloud devices"""
-        devices = self._get(f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}")
+        devices = self._get(f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANTS}")
         if devices is not None:
             return list(devices)
         return list()
 
     def get_detailed_velis_devices(self) -> list[Any]:
         """Get detailed cloud devices"""
-        devices = self._get(f"{ARISTON_API_URL}{ARISTON_VELIS}/{ARISTON_PLANTS}")
+        devices = self._get(f"{self.__api_url}{ARISTON_VELIS}/{ARISTON_PLANTS}")
         if devices is not None:
             return list(devices)
         return list()
@@ -81,7 +86,7 @@ class AristonAPI:
     def get_devices(self) -> list[Any]:
         """Get cloud devices"""
         devices = self._get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{ARISTON_LITE}"
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{ARISTON_LITE}"
         )
         if devices is not None:
             return list(devices)
@@ -90,7 +95,7 @@ class AristonAPI:
     def get_features_for_device(self, gw_id: str) -> dict[str, Any]:
         """Get features for the device"""
         features = self._get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{gw_id}/features"
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{gw_id}/features"
         )
         if features is not None:
             return features
@@ -99,7 +104,7 @@ class AristonAPI:
     def get_energy_account(self, gw_id: str) -> dict[str, Any]:
         """Get energy account for the device"""
         energy_account = self._get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_REPORTS}/{gw_id}/energyAccount"
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_REPORTS}/{gw_id}/energyAccount"
         )
         if energy_account is not None:
             return energy_account
@@ -108,7 +113,7 @@ class AristonAPI:
     def get_consumptions_sequences(self, gw_id: str, usages: str) -> list[Any]:
         """Get consumption sequences for the device"""
         consumptions_sequences = self._get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_REPORTS}/{gw_id}/consSequencesApi8?usages={usages}"
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_REPORTS}/{gw_id}/consSequencesApi8?usages={usages}"
         )
         if consumptions_sequences is not None:
             return list(consumptions_sequences)
@@ -117,7 +122,7 @@ class AristonAPI:
     def get_consumptions_settings(self, gw_id: str) -> dict[str, Any]:
         """Get consumption settings"""
         consumptions_settings = self._post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{gw_id}/getConsumptionsSettings",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{gw_id}/getConsumptionsSettings",
             {},
         )
         if consumptions_settings is not None:
@@ -131,7 +136,7 @@ class AristonAPI:
     ) -> None:
         """Get consumption settings"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{gw_id}/consumptionsSettings",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{gw_id}/consumptionsSettings",
             consumptions_settings,
         )
 
@@ -163,7 +168,7 @@ class AristonAPI:
     ) -> dict[str, Any]:
         """Get device properties"""
         properties = self._post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/get?umsys={umsys}",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/get?umsys={umsys}",
             {
                 "useCache": False,
                 "items": self.get_items(features),
@@ -175,9 +180,16 @@ class AristonAPI:
             return properties
         return dict()
 
+    def get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
+        """Get BSB plant data."""
+        data = self._get(f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}")
+        if data is not None:
+            return data
+        return dict()
+
     def get_velis_plant_data(self, plant_data: PlantData, gw_id: str) -> dict[str, Any]:
         """Get Velis properties"""
-        data = self._get(f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}")
+        data = self._get(f"{self.__api_url}{ARISTON_VELIS}/{plant_data.value}/{gw_id}")
         if data is not None:
             return data
         return dict()
@@ -187,7 +199,7 @@ class AristonAPI:
     ) -> dict[str, Any]:
         """Get Velis settings"""
         settings = self._get(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/plantSettings"
+            f"{self.__api_url}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/plantSettings"
         )
         if settings is not None:
             return settings
@@ -205,7 +217,7 @@ class AristonAPI:
     ) -> None:
         """Set device properties"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/set?umsys={umsys}",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/set?umsys={umsys}",
             {
                 "items": [
                     {
@@ -219,10 +231,19 @@ class AristonAPI:
             },
         )
 
+    def set_evo_number_of_showers(self, gw_id: str, number_of_showers: int) -> None:
+        """Set Velis Evo number of showers"""
+        self._post(
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.PD.value}/{gw_id}/showers",
+            {
+                "new": int(number_of_showers),
+            },
+        )
+
     def set_evo_mode(self, gw_id: str, value: WaterHeaterMode) -> None:
         """Set Velis Evo mode"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/mode",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/mode",
             {
                 "new": value.value,
             },
@@ -231,7 +252,7 @@ class AristonAPI:
     def set_lydos_mode(self, gw_id: str, value: LydosPlantMode) -> None:
         """Set Velis Lydos mode"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Se.value}/{gw_id}/mode",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Se.value}/{gw_id}/mode",
             {
                 "new": value.value,
             },
@@ -240,7 +261,25 @@ class AristonAPI:
     def set_nuos_mode(self, gw_id: str, value: NuosSplitOperativeMode) -> None:
         """Set Velis Nuos mode"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/operativeMode",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/operativeMode",
+            {
+                "new": value.value,
+            },
+        )
+
+    def set_bsb_mode(self, gw_id: str, value: BsbOperativeMode) -> None:
+        """Set Bsb mode"""
+        self._post(
+            f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/dhwMode",
+            {
+                "new": value.value,
+            },
+        )
+
+    def set_bsb_zone_mode(self, gw_id: str, zone: int, value: BsbZoneMode) -> None:
+        """Set Bsb zone mode"""
+        self._post(
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/mode",
             {
                 "new": value.value,
             },
@@ -249,7 +288,7 @@ class AristonAPI:
     def set_evo_temperature(self, gw_id: str, value: float) -> None:
         """Set Velis Evo temperature"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/temperature",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/temperature",
             {
                 "new": value,
             },
@@ -258,20 +297,54 @@ class AristonAPI:
     def set_lydos_temperature(self, gw_id: str, value: float) -> None:
         """Set Velis Lydos temperature"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Se.value}/{gw_id}/temperature",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Se.value}/{gw_id}/temperature",
             {
                 "new": value,
             },
         )
 
-    def set_nuos_temperature(self, gw_id: str, comfort: float, reduced: float) -> None:
+    def set_nuos_temperature(self, gw_id: str, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float]) -> None:
         """Set Nuos temperature"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/temperatures",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/temperatures",
             {
                 "new": {
                     "comfort": comfort,
                     "reduced": reduced,
+                },
+                "old": {
+                    "comfort": old_comfort,
+                    "reduced": old_reduced,
+                }
+            },
+        )
+
+    def set_bsb_temperature(self, gw_id: str, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float]) -> None:
+        """Set Bsb temperature"""
+        self._post(
+            f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/dhwTemp",
+            {
+                "new": {
+                    "comf": comfort,
+                    "econ": reduced,
+                },
+                "old": {
+                    "comf": old_comfort,
+                    "econ": old_reduced,
+                }
+            },
+        )
+
+    def set_bsb_zone_temperature(
+        self, gw_id: str, zone: int, comfort: float, reduced: float
+    ) -> None:
+        """Set Bsb zone temperature"""
+        self._post(
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/temperatures",
+            {
+                "new": {
+                    "comf": comfort,
+                    "econ": reduced,
                 }
             },
         )
@@ -279,21 +352,28 @@ class AristonAPI:
     def set_nous_boost(self, gw_id: str, boost: bool) -> None:
         """ "Set Nous boost"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/boost",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/boost",
             boost,
         )
 
     def set_evo_eco_mode(self, gw_id: str, eco_mode: bool) -> None:
         """Set Velis Evo eco mode"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/switchEco",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/switchEco",
             eco_mode,
+        )
+
+    def set_lux_power_option(self, gw_id: str, power_option: bool) -> None:
+        """Set Velis Lux2 power option"""
+        self._post(
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/switchPowerOption",
+            power_option,
         )
 
     def set_velis_power(self, plant_data: PlantData, gw_id: str, power: bool) -> None:
         """Set Velis power"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/switch",
+            f"{self.__api_url}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/switch",
             power,
         )
 
@@ -307,7 +387,7 @@ class AristonAPI:
     ) -> None:
         """Set Velis plant setting"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/plantSettings",
+            f"{self.__api_url}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/plantSettings",
             {setting: {"new": value, "old": old_value}},
         )
 
@@ -316,7 +396,7 @@ class AristonAPI:
     ) -> dict[str, Any]:
         """Get thermostat time programs"""
         thermostat_time_progs = self._get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_TIME_PROGS}/{gw_id}/ChZn{zone}?umsys={umsys}",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_TIME_PROGS}/{gw_id}/ChZn{zone}?umsys={umsys}",
         )
         if thermostat_time_progs is not None:
             return thermostat_time_progs
@@ -329,11 +409,18 @@ class AristonAPI:
     ) -> None:
         """Set holidays"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANT_DATA}/{gw_id}/holiday",
+            f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.PD}/{gw_id}/holiday",
             {
                 "new": holiday_end_date,
             },
         )
+
+    def get_bus_errors(self, gw_id: str) -> list[Any]:
+        """Get bus errors"""
+        bus_errors = self._get(f"{self.__api_url}{ARISTON_BUS_ERRORS}?gatewayId={gw_id}&blockingOnly=False&culture=en-US")
+        if bus_errors is not None:
+            return list(bus_errors)
+        return []
 
     def __request(
         self,
@@ -353,18 +440,23 @@ class AristonAPI:
             params,
         )
         response = requests.request(
-            method, path, params=params, json=body, headers=headers
+            method, path, params=params, json=body, headers=headers, timeout=30000
         )
         if not response.ok:
-            if response.status_code == 405:
-                if not is_retry:
-                    if self.connect():
+            match response.status_code:
+                case 405:
+                    if not is_retry:
+                        if self.connect():
+                            return self.__request(method, path, params, body, True)
+                        raise Exception("Login failed (password changed?)")
+                    raise Exception("Invalid token")
+                case 404:
+                    return None
+                case _:
+                    if not is_retry:
+                        time.sleep(5)
                         return self.__request(method, path, params, body, True)
-                    raise Exception("Login failed (password changed?)")
-                raise Exception("Invalid token")
-            if response.status_code == 404:
-                return None
-            raise Exception(response.status_code)
+                    raise Exception(response.status_code)
 
         if len(response.content) > 0:
             json = response.json()
@@ -388,7 +480,7 @@ class AristonAPI:
 
         try:
             response = await self._async_post(
-                f"{ARISTON_API_URL}{ARISTON_LOGIN}",
+                f"{self.__api_url}{ARISTON_LOGIN}",
                 {"usr": self.__username, "pwd": self.__password},
             )
 
@@ -405,7 +497,7 @@ class AristonAPI:
     async def async_get_detailed_devices(self) -> list[Any]:
         """Async get detailed cloud devices"""
         detailed_devices = await self._async_get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}"
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANTS}"
         )
         if detailed_devices is not None:
             return list(detailed_devices)
@@ -414,7 +506,7 @@ class AristonAPI:
     async def async_get_detailed_velis_devices(self) -> list[Any]:
         """Async get detailed cloud devices"""
         detailed_velis_devices = await self._async_get(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{ARISTON_PLANTS}"
+            f"{self.__api_url}{ARISTON_VELIS}/{ARISTON_PLANTS}"
         )
         if detailed_velis_devices is not None:
             return list(detailed_velis_devices)
@@ -423,7 +515,7 @@ class AristonAPI:
     async def async_get_devices(self) -> list[Any]:
         """Async get cloud devices"""
         devices = await self._async_get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{ARISTON_LITE}"
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{ARISTON_LITE}"
         )
         if devices is not None:
             return list(devices)
@@ -434,13 +526,13 @@ class AristonAPI:
     ) -> Optional[dict[str, Any]]:
         """Async get features for the device"""
         return await self._async_get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{gw_id}/features"
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{gw_id}/features"
         )
 
     async def async_get_energy_account(self, gw_id: str) -> dict[str, Any]:
         """Async get energy account for the device"""
         energy_account = await self._async_get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_REPORTS}/{gw_id}/energyAccount"
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_REPORTS}/{gw_id}/energyAccount"
         )
         if energy_account is not None:
             return energy_account
@@ -451,7 +543,7 @@ class AristonAPI:
     ) -> list[Any]:
         """Async get consumption sequences for the device"""
         consumptions_sequences = await self._async_get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_REPORTS}/{gw_id}/consSequencesApi8?usages={usages}"
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_REPORTS}/{gw_id}/consSequencesApi8?usages={usages}"
         )
         if consumptions_sequences is not None:
             return list(consumptions_sequences)
@@ -460,7 +552,7 @@ class AristonAPI:
     async def async_get_consumptions_settings(self, gw_id: str) -> dict[str, Any]:
         """Async get consumption settings"""
         consumptions_settings = await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{gw_id}/getConsumptionsSettings",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{gw_id}/getConsumptionsSettings",
             {},
         )
         if consumptions_settings is not None:
@@ -474,7 +566,7 @@ class AristonAPI:
     ) -> None:
         """Async set consumption settings"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{gw_id}/consumptionsSettings",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{gw_id}/consumptionsSettings",
             consumptions_settings,
         )
 
@@ -483,7 +575,7 @@ class AristonAPI:
     ) -> dict[str, Any]:
         """Async get device properties"""
         properties = await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/get?umsys={umsys}",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/get?umsys={umsys}",
             {
                 "useCache": False,
                 "items": self.get_items(features),
@@ -495,12 +587,21 @@ class AristonAPI:
             return properties
         return dict()
 
+    async def async_get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
+        """Get BSB plant data."""
+        data = await self._async_get(
+            f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}"
+        )
+        if data is not None:
+            return data
+        return dict()
+
     async def async_get_velis_plant_data(
         self, plant_data: PlantData, gw_id: str
     ) -> dict[str, Any]:
         """Async get Velis properties"""
         med_plant_data = await self._async_get(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}"
+            f"{self.__api_url}{ARISTON_VELIS}/{plant_data.value}/{gw_id}"
         )
         if med_plant_data is not None:
             return med_plant_data
@@ -511,7 +612,7 @@ class AristonAPI:
     ) -> dict[str, Any]:
         """Async get Velis settings"""
         med_plant_settings = await self._async_get(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/plantSettings"
+            f"{self.__api_url}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/plantSettings"
         )
         if med_plant_settings is not None:
             return med_plant_settings
@@ -529,7 +630,7 @@ class AristonAPI:
     ) -> None:
         """Async set device properties"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/set?umsys={umsys}",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/set?umsys={umsys}",
             {
                 "items": [
                     {
@@ -543,10 +644,19 @@ class AristonAPI:
             },
         )
 
+    async def async_set_evo_number_of_showers(self, gw_id: str, number_of_showers: int) -> None:
+        """Set Velis Evo number of showers"""
+        await self._async_post(
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.PD.value}/{gw_id}/showers",
+            {
+                "new": int(number_of_showers),
+            },
+        )
+
     async def async_set_evo_mode(self, gw_id: str, value: WaterHeaterMode) -> None:
         """Async set Velis Evo mode"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/mode",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/mode",
             {
                 "new": value.value,
             },
@@ -555,7 +665,7 @@ class AristonAPI:
     async def async_set_lydos_mode(self, gw_id: str, value: LydosPlantMode) -> None:
         """Async set Velis Lydos mode"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Se.value}/{gw_id}/mode",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Se.value}/{gw_id}/mode",
             {
                 "new": value.value,
             },
@@ -566,7 +676,27 @@ class AristonAPI:
     ) -> None:
         """Async set Velis Nuos mode"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/operativeMode",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/operativeMode",
+            {
+                "new": value.value,
+            },
+        )
+
+    async def async_set_bsb_mode(self, gw_id: str, value: BsbOperativeMode) -> None:
+        """Async set Bsb mode"""
+        await self._async_post(
+            f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/dhwMode",
+            {
+                "new": value.value,
+            },
+        )
+
+    async def async_set_bsb_zone_mode(
+        self, gw_id: str, zone: int, value: BsbZoneMode
+    ) -> None:
+        """Async set Bsb zone mode"""
+        await self._async_post(
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/mode",
             {
                 "new": value.value,
             },
@@ -575,7 +705,7 @@ class AristonAPI:
     async def async_set_evo_temperature(self, gw_id: str, value: float) -> None:
         """Async set Velis Evo temperature"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/temperature",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/temperature",
             {
                 "new": value,
             },
@@ -584,22 +714,58 @@ class AristonAPI:
     async def async_set_lydos_temperature(self, gw_id: str, value: float) -> None:
         """Async set Velis Lydos temperature"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Se.value}/{gw_id}/temperature",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Se.value}/{gw_id}/temperature",
             {
                 "new": value,
             },
         )
 
     async def async_set_nuos_temperature(
-        self, gw_id: str, comfort: float, reduced: float
+        self, gw_id: str, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float]
     ) -> None:
         """Async set Velis Lydos temperature"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/temperatures",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/temperatures",
             {
                 "new": {
                     "comfort": comfort,
                     "reduced": reduced,
+                },
+                "old": {
+                    "comfort": old_comfort,
+                    "reduced": old_reduced,
+                }
+            },
+        )
+
+    async def async_set_bsb_temperature(
+        self, gw_id: str, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float]
+    ) -> None:
+        """Async set Bsb temperature"""
+        await self._async_post(
+            f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/dhwTemp",
+            {
+                "new": {
+                    "comf": comfort,
+                    "econ": reduced,
+                },
+                "old": {
+                    "comf": old_comfort,
+                    "econ": old_reduced,
+                }
+            },
+        )
+
+    async def async_set_bsb_zone_temperature(
+        self, gw_id: str, zone: int, comfort: float, reduced: float
+    ) -> None:
+        """Async set Bsb zone temperature"""
+        await self._async_post(
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/temperatures",
+            {
+                "new": {
+                    "comf": comfort,
+                    "econ": reduced,
                 }
             },
         )
@@ -607,15 +773,22 @@ class AristonAPI:
     async def async_set_nous_boost(self, gw_id: str, boost: bool) -> None:
         """ "Set Nous boost"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/boost",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/boost",
             boost,
         )
 
     async def async_set_evo_eco_mode(self, gw_id: str, eco_mode: bool) -> None:
         """Async set Velis Evo eco mode"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/switchEco",
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/switchEco",
             eco_mode,
+        )
+
+    async def async_set_lux_power_option(self, gw_id: str, power_option: bool) -> None:
+        """Set Velis Lux2 power option"""
+        await self._async_post(
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/switchPowerOption",
+            power_option,
         )
 
     async def async_set_velis_power(
@@ -623,7 +796,7 @@ class AristonAPI:
     ) -> None:
         """Async set Velis power"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/switch",
+            f"{self.__api_url}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/switch",
             power,
         )
 
@@ -637,7 +810,7 @@ class AristonAPI:
     ) -> None:
         """Async set Velis Evo plant setting"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/plantSettings",
+            f"{self.__api_url}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/plantSettings",
             {setting: {"new": value, "old": old_value}},
         )
 
@@ -646,7 +819,7 @@ class AristonAPI:
     ) -> Optional[dict[str, Any]]:
         """Async get thermostat time programs"""
         return await self._async_get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_TIME_PROGS}/{gw_id}/ChZn{zone}?umsys={umsys}",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_TIME_PROGS}/{gw_id}/ChZn{zone}?umsys={umsys}",
         )
 
     async def async_set_holiday(
@@ -657,11 +830,18 @@ class AristonAPI:
         """Async set holidays"""
 
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANT_DATA}/{gw_id}/holiday",
+            f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.PD}/{gw_id}/holiday",
             {
                 "new": holiday_end_date,
             },
         )
+
+    async def async_get_bus_errors(self, gw_id: str) -> list[Any]:
+        """Async get bus errors"""
+        bus_errors = await self._async_get(f"{self.__api_url}{ARISTON_BUS_ERRORS}?gatewayId={gw_id}&blockingOnly=False&culture=en-US")
+        if bus_errors is not None:
+            return list(bus_errors)
+        return []
 
     async def __async_request(
         self,
@@ -687,17 +867,24 @@ class AristonAPI:
             )
 
             if not response.ok:
-                if response.status == 405:
-                    if not is_retry:
-                        if await self.async_connect():
+                match response.status:
+                    case 405:
+                        if not is_retry:
+                            if await self.async_connect():
+                                return await self.__async_request(
+                                    method, path, params, body, True
+                                )
+                            raise Exception("Login failed (password changed?)")
+                        raise Exception("Invalid token")
+                    case 404:
+                        return None
+                    case _:
+                        if not is_retry:
+                            await asyncio.sleep(5)
                             return await self.__async_request(
                                 method, path, params, body, True
                             )
-                        raise Exception("Login failed (password changed?)")
-                    raise Exception("Invalid token")
-                if response.status == 404:
-                    return None
-                raise Exception(response.status)
+                        raise Exception(response.status)
 
             if response.content_length and response.content_length > 0:
                 json = await response.json()

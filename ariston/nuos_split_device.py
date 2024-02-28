@@ -107,6 +107,11 @@ class AristonNuosSplitDevice(AristonVelisDevice):
         """Get water heater boost"""
         return self.data.get(NuosSplitProperties.BOOST_ON, None)
 
+    @property
+    def water_heater_mode_value(self) -> Optional[int]:
+        """Get water heater mode value"""
+        return self.data.get(NuosSplitProperties.OP_MODE, None)
+
     def set_water_heater_boost(self, boost: bool):
         """Set water heater boost"""
         self.api.set_nous_boost(self.gw, boost)
@@ -119,7 +124,7 @@ class AristonNuosSplitDevice(AristonVelisDevice):
 
     def _set_water_heater_temperature(self, temperature: float, reduced: float):
         """Set water heater temperature"""
-        self.api.set_nuos_temperature(self.gw, temperature, reduced)
+        self.api.set_nuos_temperature(self.gw, temperature, reduced, self.water_heater_target_temperature, self.water_heater_reduced_temperature)
         self.data[NuosSplitProperties.PROC_REQ_TEMP] = temperature
         self.data[NuosSplitProperties.REDUCED_TEMP] = reduced
 
@@ -136,7 +141,7 @@ class AristonNuosSplitDevice(AristonVelisDevice):
         self, temperature: float, reduced: float
     ):
         """Async set water heater temperature"""
-        await self.api.async_set_nuos_temperature(self.gw, temperature, reduced)
+        await self.api.async_set_nuos_temperature(self.gw, temperature, reduced, self.water_heater_target_temperature, self.water_heater_reduced_temperature)
         self.data[NuosSplitProperties.PROC_REQ_TEMP] = temperature
         self.data[NuosSplitProperties.REDUCED_TEMP] = reduced
 

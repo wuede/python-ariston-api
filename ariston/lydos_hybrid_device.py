@@ -66,6 +66,66 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
             ConsumptionTimeInterval.LAST_DAY,
         )
 
+    @property
+    def permanent_boost_value(self) -> int:
+        """Get permanent boost value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF, 0)
+
+    @property
+    def anti_cooling_value(self) -> int:
+        """Get anti cooling value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_ANTI_COOLING_ON_OFF, 0)
+
+    @property
+    def anti_cooling_temperature_value(self) -> int:
+        """Get anti cooling temperature value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE, 0)
+
+    @property
+    def anti_cooling_temperature_maximum(self) -> int:
+        """Get anti cooling temperature maximum"""
+        return self.plant_settings.get(SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE_MAX, 0)
+
+    @property
+    def anti_cooling_temperature_minimum(self) -> int:
+        """Get anti cooling temperature minimum"""
+        return self.plant_settings.get(SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE_MIN, 0)
+
+    @property
+    def night_mode_value(self) -> int:
+        """Get night mode value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_NIGHT_MODE_ON_OFF, 0)
+
+    @property
+    def night_mode_begin_as_minutes_value(self) -> int:
+        """Get night mode begin as minutes value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_NIGHT_BEGIN_AS_MINUTES, 0)
+
+    @property
+    def night_mode_begin_max_as_minutes_value(self) -> int:
+        """Get night mode begin max as minutes value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_NIGHT_BEGIN_MAX_AS_MINUTES, 0)
+
+    @property
+    def night_mode_begin_min_as_minutes_value(self) -> int:
+        """Get night mode begin min as minutes value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_NIGHT_BEGIN_MIN_AS_MINUTES, 0)
+
+    @property
+    def night_mode_end_as_minutes_value(self) -> int:
+        """Get night mode end as minutes value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_NIGHT_END_AS_MINUTES, 0)
+
+    @property
+    def night_mode_end_max_as_minutes_value(self) -> int:
+        """Get night mode end max as minutes value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_NIGHT_END_MAX_AS_MINUTES, 0)
+
+    @property
+    def night_mode_end_min_as_minutes_value(self) -> int:
+        """Get night mode end min as minutes value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_NIGHT_END_MIN_AS_MINUTES, 0)
+
     def set_water_heater_operation_mode(self, operation_mode: str):
         """Set water heater operation mode"""
         self.api.set_lydos_mode(self.gw, LydosPlantMode[operation_mode])
@@ -85,3 +145,135 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
         """Async set water heater temperature"""
         await self.api.async_set_lydos_temperature(self.gw, temperature)
         self.data[LydosDeviceProperties.REQ_TEMP] = temperature
+
+    def set_permanent_boost_value(self, boost: float) -> None:
+        """Set permanent boost value"""
+        self.api.set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF,
+            1.0 if boost else 0.0,
+            1.0 if self.permanent_boost_value else 0.0,
+        )
+        self.plant_settings[SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF] = boost
+
+    async def async_set_permanent_boost_value(self, boost: float) -> None:
+        """Async set permanent boost value"""
+        await self.api.async_set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF,
+            1.0 if boost else 0.0,
+            1.0 if self.permanent_boost_value else 0.0,
+        )
+        self.plant_settings[SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF] = boost
+
+    def set_anti_cooling_value(self, anti_cooling: float) -> None:
+        """Set anti cooling value"""
+        self.api.set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_ANTI_COOLING_ON_OFF,
+            1.0 if anti_cooling else 0.0,
+            1.0 if self.anti_cooling_value else 0.0,
+        )
+        self.plant_settings[SeDeviceSettings.SE_ANTI_COOLING_ON_OFF] = anti_cooling
+
+    async def async_set_anti_cooling_value(self, anti_cooling: float) -> None:
+        """Async set anti cooling value"""
+        await self.api.async_set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_ANTI_COOLING_ON_OFF,
+            1.0 if anti_cooling else 0.0,
+            1.0 if self.anti_cooling_value else 0.0,
+        )
+        self.plant_settings[SeDeviceSettings.SE_ANTI_COOLING_ON_OFF] = anti_cooling
+
+    def set_cooling_temperature_value(self, temperature: float) -> None:
+        """Set cooling temperature value"""
+        self.api.set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE,
+            temperature,
+            self.anti_cooling_temperature_value,
+        )
+        self.plant_settings[SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE] = temperature
+
+    async def async_set_cooling_temperature_value(self, temperature: float) -> None:
+        """Async set cooling temperature value"""
+        await self.api.async_set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE,
+            temperature,
+            self.anti_cooling_temperature_value,
+        )
+        self.plant_settings[SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE] = temperature
+
+    def set_night_mode_value(self, night_mode: float) -> None:
+        """Set night mode value"""
+        self.api.set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_NIGHT_MODE_ON_OFF,
+            1.0 if night_mode else 0.0,
+            1.0 if self.night_mode_value else 0.0,
+        )
+        self.plant_settings[SeDeviceSettings.SE_NIGHT_MODE_ON_OFF] = night_mode
+
+    async def async_set_night_mode_value(self, night_mode: float) -> None:
+        """Async set night mode value"""
+        await self.api.async_set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_NIGHT_MODE_ON_OFF,
+            1.0 if night_mode else 0.0,
+            1.0 if self.night_mode_value else 0.0,
+        )
+        self.plant_settings[SeDeviceSettings.SE_NIGHT_MODE_ON_OFF] = night_mode
+
+    def set_night_mode_begin_as_minutes_value(self, night_mode_begin_as_minutes: int) -> None:
+        """Set night mode begin as minutes value"""
+        self.api.set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_NIGHT_BEGIN_AS_MINUTES,
+            night_mode_begin_as_minutes,
+            self.night_mode_begin_as_minutes_value,
+        )
+        self.plant_settings[SeDeviceSettings.SE_NIGHT_BEGIN_AS_MINUTES] = night_mode_begin_as_minutes
+
+    async def async_set_night_mode_begin_as_minutes_value(self, night_mode_begin_as_minutes: int) -> None:
+        """Async set night mode begin as minutes value"""
+        await self.api.async_set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_NIGHT_BEGIN_AS_MINUTES,
+            night_mode_begin_as_minutes,
+            self.night_mode_begin_as_minutes_value,
+        )
+        self.plant_settings[SeDeviceSettings.SE_NIGHT_BEGIN_AS_MINUTES] = night_mode_begin_as_minutes
+
+    def set_night_mode_end_as_minutes_value(self, night_mode_end_as_minutes: int) -> None:
+        """Set night mode end as minutes value"""
+        self.api.set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_NIGHT_END_AS_MINUTES,
+            night_mode_end_as_minutes,
+            self.night_mode_end_as_minutes_value,
+        )
+        self.plant_settings[SeDeviceSettings.SE_NIGHT_END_AS_MINUTES] = night_mode_end_as_minutes
+
+    async def async_set_night_mode_end_as_minutes_value(self, night_mode_end_as_minutes: int) -> None:
+        """Async set night mode end as minutes value"""
+        await self.api.async_set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_NIGHT_END_AS_MINUTES,
+            night_mode_end_as_minutes,
+            self.night_mode_end_as_minutes_value,
+        )
+        self.plant_settings[SeDeviceSettings.SE_NIGHT_END_AS_MINUTES] = night_mode_end_as_minutes
